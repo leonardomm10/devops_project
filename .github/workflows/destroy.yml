@@ -20,7 +20,7 @@ jobs:
       
       - name: Terraform Init
         working-directory: ./terraform
-        run: terraform init -backend-config="bucket=${{ vars.RDS_USERNAME }}" -backend-config="key=devops_project.tfstate"
+        run: terraform init -backend-config="bucket=${{ vars.TFSTATE_BUCKET }}" -backend-config="key=devops_project.tfstate"
 
       - name: Capture Terraform Outputs
         id: capture_outputs
