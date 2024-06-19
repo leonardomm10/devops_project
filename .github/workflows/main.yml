@@ -1,0 +1,55 @@
+name: "Create and Configure EKS Cluster"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    name: "Create and Configure EKS Cluster"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+          
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Terraform init
+        working-directory: ./terraform
+        run: terraform init -backend-config="bucket=${{ vars.RDS_USERNAME }}" -backend-config="key=devops_project.tfstate"
+
+      - name: Terraform Apply 
+        working-directory: ./terraform
+        run: terraform apply -var "aws_rds_username=${{ vars.RDS_USERNAME }}" -var "aws_rds_password=${{ secrets.RDS_PASSWORD }}" --auto-approve
+
+      - name: Capture Terraform Outputs
+        id: capture_outputs
+        working-directory: ./terraform
+        run: |
+          echo "cluster_name=$(terraform output -raw cluster_name)" >> $GITHUB_ENV
+          echo "rds_endpoint=$(terraform output -raw rds_endpoint)" >> $GITHUB_ENV
+          echo "efs_file_system_id=$(terraform output -raw efs_file_system_id)" >> $GITHUB_ENV
+
+      - name: Configure Cluster
+        working-directory: ./
+        env:
+          CLUSTER_NAME: ${{ env.cluster_name }}
+          RDS_ENDPOINT: ${{ env.rds_endpoint }}
+          EFS_FILE_SYSTEM_ID: ${{ env.efs_file_system_id }}
+        run: |
+          aws eks update-kubeconfig --name $CLUSTER_NAME
+          sed -i s/file_system_id/$EFS_FILE_SYSTEM_ID/g k8s/storageclass.yaml
+          sed -i s/clusterissuer_email/${{ vars.CLUSTERISSUER_EMAIL }}/g k8s/clusterissuer.yaml
+          kubectl apply -f k8s/
+
+      - name: Print Cluster Infos
+        env:
+          RDS_ENDPOINT: ${{ env.rds_endpoint }}
+        run: |
+          echo Ingress LoadBalancer: $(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo RDS Endpoint: $RDS_ENDPOINT
+          echo Argocd Admin Password: $(kubectl -n argo-cd get secrets argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
