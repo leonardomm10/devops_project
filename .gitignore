@@ -1,3 +1,4 @@
 bucket/.terraform*
+bucket/terraform*
 terraform/.terraform*
 .vscode/
