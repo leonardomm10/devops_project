@@ -1,4 +1,5 @@
 bucket/.terraform*
-bucket/terraform*
+bucket/terraform.tfstate
+bucket/terraform.tfstate.backup
 terraform/.terraform*
 .vscode/
